@@ -1,6 +1,6 @@
 function configuration_file_profiler
 
-% Version: 1.1
+% Version: 1.2
 
 % Get the release number.
 versionOutput = version;
