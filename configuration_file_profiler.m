@@ -9,7 +9,7 @@ tokens = regexp(versionOutput, pattern, 'tokens');
 
 % Check if any parentheses were found for "version".
 if ~isempty(tokens)
-    versionNumber = tokens{1}{1}; % tokens is a cell array of cell arrays. Neat! It's the year followed the by the release letter.
+    versionNumber = tokens{1}{1}; % tokens ends up being a cell array in a cell array. 
     versionNumber = versionNumber(2:end); % Remove the R since it's often already included in configuration files when using this environment variable.
     environmentVariableToSet = 'MATLAB_VERSION_STRING';
     setenv(environmentVariableToSet, versionNumber)
