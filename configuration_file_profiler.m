@@ -1,4 +1,6 @@
-function integration_scripts_profiler
+function configuration_file_profiler
+
+% Version: 1.1
 
 % Get the release number.
 versionOutput = version;
@@ -7,13 +9,13 @@ tokens = regexp(versionOutput, pattern, 'tokens');
 
 % Check if any parentheses were found for "version".
 if ~isempty(tokens)
-    versionNumber = tokens{1}{1}; % tokens is a cell array of cell arrays. Neat!
+    versionNumber = tokens{1}{1}; % tokens is a cell array of cell arrays. Neat! It's the year followed the by the release letter.
     versionNumber = versionNumber(2:end); % Remove the R since it's often already included in configuration files when using this environment variable.
     environmentVariableToSet = 'MATLAB_VERSION_STRING';
     setenv(environmentVariableToSet, versionNumber)
     versionNumberFloat = str2double(regexprep(versionNumber, '[ab]', ''));
     if ~isempty(strfind(versionNumber, 'b'))
-        versionNumberFloat = versionNumberFloat + 0.5;
+        versionNumberFloat = versionNumberFloat + 0.5; % 0.5 is used to indicate b releases.
     end
 
     % The way that MATLAB handles numbers is infuriating.
@@ -24,7 +26,7 @@ else
     error('MATLAB release number could not be parsed. Exiting.');
 end
 
-if versionNumberFloat < 2012
+if versionNumberFloat < 2.012
     error('R2012a or newer is required to use this function.')
 end
 
