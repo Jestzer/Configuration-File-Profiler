@@ -4,12 +4,12 @@ function configuration_file_profiler
 
 % Get the release number.
 versionOutput = version;
-pattern = '\((.*?)\)';
-tokens = regexp(versionOutput, pattern, 'tokens');
+patternToParseReleaseNumber = '\((.*?)\)';
+tokensToGenerateReleaseNumber = regexp(versionOutput, patternToParseReleaseNumber, 'tokens');
 
 % Check if any parentheses were found for "version".
-if ~isempty(tokens)
-    versionNumber = tokens{1}{1}; % tokens ends up being a cell array in a cell array. 
+if ~isempty(tokensToGenerateReleaseNumber)
+    versionNumber = tokensToGenerateReleaseNumber{1}{1}; % tokens ends up being a cell array in a cell array.
     versionNumber = versionNumber(2:end); % Remove the R since it's often already included in configuration files when using this environment variable.
     environmentVariableToSet = 'MATLAB_VERSION_STRING';
     setenv(environmentVariableToSet, versionNumber)
@@ -23,7 +23,7 @@ if ~isempty(tokens)
         versionNumberFloat = versionNumberFloat / 1000;
     end
 else
-    error('MATLAB release number could not be parsed. Exiting.');
+    error('The release of MATAB you are using could not be determined. As a result, this function is stopping prematurely.');
 end
 
 if versionNumberFloat < 2.012
@@ -38,31 +38,41 @@ confFiles = dir(confSearchPath);
 
 if ~isempty(confFiles)
 
-    % Find all .conf files and assign a number to each found.    
+    % Find all .conf files and assign a number to each found.
     for i = 1:length(confFiles)
     end
 
     if i == 1
         selectedIndex = 1;
     else % Select a .conf file if you have multiple.
-        fprintf('Multiple .conf files found:\n');
+        fprintf('Multiple .conf files found. Which would you like to use?:\n');
         for i = 1:length(confFiles)
             fprintf('%d: %s\n', i, confFiles(i).name);
         end
-        selectedIndex = input('Select a .conf file by number: ');
-    
-        % Validate user input.
+
+        try
+            selectedIndex = input('Select a .conf file by entering its corresponding number and then Enter/Return on your keyboard: ');
+        catch errorMessage
+            if ~isempty(strfind(errorMessage.message, 'Cannot call INPUT from EVALC.')) % MATLAB's VSC + input = angry MATLAB.
+                error(['You were prompted to provide input for an option given, but you are running MATLAB in an environment that cannot receive your input. ' ...
+                    'Please run MATLAB in a normal desktop environment.'])
+            else
+                error('%s', errorMessage.message)
+            end
+        end
+
+        % Validate the user's input.
         if selectedIndex < 1 || selectedIndex > length(confFiles) || ~isnumeric(selectedIndex) || ~mod(selectedIndex, 1) == 0
-            error('Invalid selection. Exiting.');
+            error('You made an invalid selection. Exiting.');
         end
     end
 
-    
+
     % Get the selected .conf file name.
     confFileName = confFiles(selectedIndex).name;
     fprintf('Configuration file selected: %s\n', confFileName);
 else
-    error('No .conf file found in the same directory as this function. Exiting.');
+    error('No .conf files were found in the same directory as this function. Please place your .conf file(s) in the same directory as this function. Exiting.');
 end
 
 % Combine macOS and Linux.
@@ -120,26 +130,26 @@ try
                 elseif ~isempty(strfind(propertyName, '(Unix)')) && isUnixBased
                     propertyName = strrep(propertyName, '(Unix)', '');
                     propertyName = strtrim(propertyName);
-                elseif (strcmp(propertyName, 'JobStorageLocation.windows') && ispc) || (strcmp(propertyName, 'JobStorageLocation.unix') && ispc)                    
-                 nextLine = fgetl(fileID);
-                 eqIndex = strfind(nextLine, '=');
-                                  
-                 if ~isempty(eqIndex) % Check if the equals sign was found.
-                    propertyValue2 = strtrim(nextLine(eqIndex+1:end));
+                elseif (strcmp(propertyName, 'JobStorageLocation.windows') && ispc) || (strcmp(propertyName, 'JobStorageLocation.unix') && ispc)
+                    nextLine = fgetl(fileID);
+                    eqIndex = strfind(nextLine, '=');
 
-                    % Swap values if 'windows' is not found in propertyName.
-                    if ~isempty(strfind(lower(propertyName), 'windows'))
-                        [propertyValue, propertyValue2] = deal(propertyValue2, propertyValue);
+                    if ~isempty(eqIndex) % Check if the equals sign was found.
+                        propertyValue2 = strtrim(nextLine(eqIndex+1:end));
+
+                        % Swap values if 'windows' is not found in propertyName.
+                        if ~isempty(strfind(lower(propertyName), 'windows'))
+                            [propertyValue, propertyValue2] = deal(propertyValue2, propertyValue);
+                        end
+
+                        % Make JobStorageLocation a struct to properly save this.
+                        propertyValueStruct = struct('windows', propertyValue, 'unix', propertyValue2);
+                        c.JobStorageLocation = propertyValueStruct;
+                        HasSharedFilesystem = true; % File contents take precedence over the file name.
+                        continue
+                    else
+                        error('The second line in JobStorageLocation struct does not contain an equals sign or is incorrectly formatted.');
                     end
-
-                    % Make JobStorageLocation a struct to properly save this.
-                    propertyValueStruct = struct('windows', propertyValue, 'unix', propertyValue2);
-                    c.JobStorageLocation = propertyValueStruct;
-                    HasSharedFilesystem = true; % File contents take precedence over the file name.
-                    continue
-                else
-                    error('The second line in JobStorageLocation struct does not contain an equals sign or is incorrectly formatted.');
-                end
 
                 elseif ~isempty(strfind(propertyName, '(Windows)')) || ~isempty(strfind(propertyName, '(Unix)'))
                     continue; % OS does not match, skip this property.
@@ -159,7 +169,7 @@ try
                         propertyName = strrep(propertyName, 'PluginScriptsLocation', 'IntegrationScriptsLocation');
                     elseif versionNumberFloat < 2.017 % The pain we used to have to go through.
                         c.IndependentSubmitFcn = fullfile(propertyValue, 'independentSubmitFcn.m');
-                        c.CommunicatingSubmitFcn = fullfile(propertyValue, 'communicatingSubmitFcn.m');                        
+                        c.CommunicatingSubmitFcn = fullfile(propertyValue, 'communicatingSubmitFcn.m');
                         c.GetJobStateFcn = fullfile(propertyValue, 'getJobStateFcn.m');
                         c.DeleteJobFcn = fullfile(propertyValue, 'deleteJobFcn.m');
                         c.DeleteTaskFcn = fullfile(propertyValue, 'deleteTaskFcn.m');
@@ -198,7 +208,7 @@ try
                 elseif strcmp(propertyName, 'RequiresOnlineLicensing') && versionNumberFloat < 2.0125 % You weren't around yet!
                     continue
                 end
-                
+
                 % Temporarily store goodies in the cluster object.
                 c.(propertyName) = propertyValue;
             end
@@ -258,7 +268,7 @@ try
                     end
 
                     % Set booleans and doubles correctly.
-                    if isempty(propertyValue) % Do nothing.        
+                    if isempty(propertyValue) % Do nothing.
                     elseif strcmpi(propertyValue, 'true')
                         propertyValue = true;
                     elseif strcmpi(propertyValue, 'false')
@@ -267,13 +277,14 @@ try
                         propertyValue = str2double(propertyValue);
                     end
 
-                    c.AdditionalProperties.(propertyName) = propertyValue;                    
+                    c.AdditionalProperties.(propertyName) = propertyValue;
                 end
             end
         end
     end
 catch errorMessage
-    if isempty(strfind(errorMessage.message, 'already exists.'))
+    if isempty(strfind(errorMessage.message, 'already exists.')) % If the cluster profile already exists, we DON'T want to remove it.
+        % Otherwise, something went wrong and we should delete the half-baked profile we just made.
         parallel.internal.ui.MatlabProfileManager.removeProfile(clusterName)
     end
     error('%s', errorMessage.message)
