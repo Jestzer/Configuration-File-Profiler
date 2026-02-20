@@ -23,7 +23,7 @@ if ~isempty(tokensToGenerateReleaseNumber)
         versionNumberFloat = versionNumberFloat / 1000;
     end
 else
-    error('The release of MATAB you are using could not be determined. As a result, this function is stopping prematurely.');
+    error('The release of MATLAB you are using could not be determined. As a result, this function is stopping prematurely.');
 end
 
 if versionNumberFloat < 2.012
@@ -38,11 +38,7 @@ confFiles = dir(confSearchPath);
 
 if ~isempty(confFiles)
 
-    % Find all .conf files and assign a number to each found.
-    for i = 1:length(confFiles)
-    end
-
-    if i == 1
+    if length(confFiles) == 1
         selectedIndex = 1;
     else % Select a .conf file if you have multiple.
         fprintf('Multiple .conf files found. Which would you like to use?:\n');
@@ -62,7 +58,7 @@ if ~isempty(confFiles)
         end
 
         % Validate the user's input.
-        if selectedIndex < 1 || selectedIndex > length(confFiles) || ~isnumeric(selectedIndex) || ~mod(selectedIndex, 1) == 0
+        if ~isnumeric(selectedIndex) || mod(selectedIndex, 1) ~= 0 || selectedIndex < 1 || selectedIndex > length(confFiles)
             error('You made an invalid selection. Exiting.');
         end
     end
@@ -79,10 +75,12 @@ end
 isUnixBased = isunix || ismac;
 
 % Open the .conf file for reading
-fileID = fopen(confFileName, 'r');
+fileID = fopen(fullfile(functionDir, confFileName), 'r');
 if fileID == -1
     error('Failed to open .conf file: %s\n', confFileName);
 end
+
+cleanupObj = onCleanup(@() fclose(fileID)); %#ok<NASGU>
 
 try
     % Create the profile.
@@ -110,18 +108,7 @@ try
                 propertyValue = strrep(propertyValue, '"', '');
 
                 % Get environment variables when used.
-                if ~isempty(strfind(propertyValue, '$'))
-                    pattern = '\$(\w+)';
-                    tokens = regexp(propertyValue, pattern, 'tokens');
-
-                    if ~isempty(tokens)
-                        envVarName = tokens{1}{1};
-                        envVarValue = getenv(envVarName);
-
-                        % Replace the occurrence of the environment variable in the original string.
-                        propertyValue = strrep(propertyValue, ['$' envVarName], envVarValue);
-                    end
-                end
+                propertyValue = expandEnvVars(propertyValue);
 
                 % Check for OS-specific properties.
                 if ~isempty(strfind(propertyName, '(Windows)')) && ispc
@@ -130,7 +117,7 @@ try
                 elseif ~isempty(strfind(propertyName, '(Unix)')) && isUnixBased
                     propertyName = strrep(propertyName, '(Unix)', '');
                     propertyName = strtrim(propertyName);
-                elseif (strcmp(propertyName, 'JobStorageLocation.windows') && ispc) || (strcmp(propertyName, 'JobStorageLocation.unix') && ispc)
+                elseif (strcmp(propertyName, 'JobStorageLocation.windows') && ispc) || (strcmp(propertyName, 'JobStorageLocation.unix') && isUnixBased)
                     nextLine = fgetl(fileID);
                     eqIndex = strfind(nextLine, '=');
 
@@ -156,7 +143,7 @@ try
                 end
 
                 if strcmp(propertyName, 'Name')
-                    if versionNumberFloat < 2.0165 && ~isempty(strfind(propertyValue, ' ')) % No spaces allowed prior to R2016b.ß
+                    if versionNumberFloat < 2.0165 && ~isempty(strfind(propertyValue, ' ')) % No spaces allowed prior to R2016b.
                         propertyValue = strrep(propertyValue, ' ', '_');
                     end
 
@@ -179,7 +166,7 @@ try
                         continue % Change this to divide the files up, as they used to do this (yuck.)
                     end
 
-                elseif strcmp(propertyName, 'JobStorageLocation') && ~isempty(strfind(propertyValue, 'struct'))
+                elseif strcmp(propertyName, 'JobStorageLocation') && isempty(strfind(propertyValue, 'struct'))
                     % Check if the job storage location exists.
                     if ~exist(propertyValue, 'dir')
                         [success, message, ~] = mkdir(propertyValue); % The directory does not exist, attempt to create it.
@@ -245,16 +232,7 @@ try
                     propertyValue = strtrim(parts{2});
                     propertyValue = strrep(propertyValue, '"', '');
 
-                    if ~isempty(strfind(propertyValue, '$'))
-                        pattern = '\$(\w+)';
-                        tokens = regexp(propertyValue, pattern, 'tokens');
-
-                        if ~isempty(tokens)
-                            envVarName = tokens{1}{1};
-                            envVarValue = getenv(envVarName);
-                            propertyValue = strrep(propertyValue, ['$' envVarName], envVarValue);
-                        end
-                    end
+                    propertyValue = expandEnvVars(propertyValue);
 
                     % Check for OS-specific properties.
                     if ~isempty(strfind(propertyName, '(Windows)')) && ispc
@@ -292,6 +270,17 @@ end
 
 saveProfile(c);
 parallel.defaultClusterProfile(clusterName);
-fclose(fileID);
 
 disp(['Profile cluster successfully created and named as follows: ', clusterName]);
+
+end
+
+function propertyValue = expandEnvVars(propertyValue)
+    pattern = '\$(\w+)';
+    tokens = regexp(propertyValue, pattern, 'tokens');
+    for k = 1:numel(tokens)
+        envVarName = tokens{k}{1};
+        envVarValue = getenv(envVarName);
+        propertyValue = strrep(propertyValue, ['$' envVarName], envVarValue);
+    end
+end
